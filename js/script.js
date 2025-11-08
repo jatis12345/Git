@@ -57,9 +57,13 @@ const animatedElements = document.querySelectorAll('.fade-in, .fade-up, .fade-in
 animatedElements.forEach(el => observer.observe(el));
 
 // ===================================
-// CAPTCHA System
+// CAPTCHA System with 3-Attempt Limit
 // ===================================
 let captchaAnswer;
+let captchaAttempts = 0;
+const MAX_CAPTCHA_ATTEMPTS = 3;
+let formLocked = false;
+let lockTimeout;
 
 function generateCaptcha() {
     const num1 = Math.floor(Math.random() * 10) + 1;
@@ -84,6 +88,62 @@ function generateCaptcha() {
     document.getElementById('captcha-question').textContent = question;
 }
 
+function lockForm() {
+    formLocked = true;
+    const submitBtn = contactForm.querySelector('.btn-submit');
+    const captchaInput = document.getElementById('captcha-answer');
+    const formInputs = contactForm.querySelectorAll('input, textarea, button');
+
+    // Disable all form inputs
+    formInputs.forEach(input => {
+        input.disabled = true;
+    });
+
+    // Show locked message
+    showMessage('Form telah dikunci karena terlalu banyak percobaan CAPTCHA yang salah. Silakan refresh halaman atau tunggu 5 menit untuk mencoba lagi.', 'error');
+
+    // Auto unlock after 5 minutes
+    lockTimeout = setTimeout(() => {
+        unlockForm();
+        showMessage('Form telah dibuka kembali. Silakan coba lagi.', 'success');
+    }, 5 * 60 * 1000); // 5 minutes
+}
+
+function unlockForm() {
+    formLocked = false;
+    captchaAttempts = 0;
+    const formInputs = contactForm.querySelectorAll('input, textarea, button');
+
+    // Enable all form inputs
+    formInputs.forEach(input => {
+        input.disabled = false;
+    });
+
+    generateCaptcha();
+    document.getElementById('captcha-answer').value = '';
+}
+
+function updateAttemptsDisplay() {
+    const remainingAttempts = MAX_CAPTCHA_ATTEMPTS - captchaAttempts;
+    const captchaBox = document.querySelector('.captcha-box');
+
+    let attemptsInfo = captchaBox.querySelector('.attempts-info');
+    if (!attemptsInfo) {
+        attemptsInfo = document.createElement('div');
+        attemptsInfo.className = 'attempts-info';
+        captchaBox.appendChild(attemptsInfo);
+    }
+
+    if (captchaAttempts > 0) {
+        attemptsInfo.textContent = `⚠️ Sisa percobaan: ${remainingAttempts}x`;
+        attemptsInfo.style.color = remainingAttempts <= 1 ? '#e53e3e' : '#d69e2e';
+        attemptsInfo.style.fontWeight = 'bold';
+        attemptsInfo.style.marginTop = '0.5rem';
+    } else {
+        attemptsInfo.textContent = '';
+    }
+}
+
 // Generate captcha on page load
 generateCaptcha();
 
@@ -96,6 +156,12 @@ const formMessage = document.getElementById('form-message');
 contactForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
+    // Check if form is locked
+    if (formLocked) {
+        showMessage('Form telah dikunci. Silakan tunggu atau refresh halaman.', 'error');
+        return;
+    }
+
     // Get form data
     const formData = {
         name: document.getElementById('name').value,
@@ -107,11 +173,23 @@ contactForm.addEventListener('submit', async (e) => {
 
     // Validate CAPTCHA
     if (parseInt(formData.captcha) !== captchaAnswer) {
-        showMessage('Jawaban CAPTCHA salah. Silakan coba lagi.', 'error');
+        captchaAttempts++;
+        updateAttemptsDisplay();
+
+        if (captchaAttempts >= MAX_CAPTCHA_ATTEMPTS) {
+            lockForm();
+            return;
+        }
+
+        showMessage(`Jawaban CAPTCHA salah. Sisa ${MAX_CAPTCHA_ATTEMPTS - captchaAttempts} percobaan lagi.`, 'error');
         generateCaptcha();
         document.getElementById('captcha-answer').value = '';
         return;
     }
+
+    // Reset attempts on successful CAPTCHA
+    captchaAttempts = 0;
+    updateAttemptsDisplay();
 
     // Show loading state
     const submitBtn = contactForm.querySelector('.btn-submit');

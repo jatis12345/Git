@@ -1,0 +1,8 @@
+# Deny access to all log files
+Require all denied
+
+# Alternative for older Apache versions
+<Files "*">
+    Order allow,deny
+    Deny from all
+</Files>
